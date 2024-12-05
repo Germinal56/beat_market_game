@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Market Game</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: black;
+            color: white;
+        }
+        #assets {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            font-size: 24px;
+            font-family: Arial, sans-serif;
+            font-weight: bold;
+            color: white;
+        }
+        #marketCap {
+            position: absolute;
+            top: 50px;
+            right: 10px;
+            font-size: 20px;
+            font-family: Arial, sans-serif;
+            color: white;
+        }
+        #splitDisplay {
+            position: absolute;
+            top: 80px;
+            right: 10px;
+            font-size: 20px;
+            font-family: Arial, sans-serif;
+            color: white;
+        }
+        #positionsOpened {
+            position: absolute;
+            top: 110px;
+            right: 10px;
+            font-size: 20px;
+            font-family: Arial, sans-serif;
+            color: white;
+        }
+        #averageReturn {
+            position: absolute;
+            top: 140px;
+            right: 10px;
+            font-size: 20px;
+            font-family: Arial, sans-serif;
+            color: white;
+        }
+        #avgHoldingPeriod {
+            position: absolute;
+            top: 170px;
+            right: 10px;
+            font-size: 20px;
+            font-family: Arial, sans-serif;
+            color: white;
+        }
+        #message {
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 24px;
+            font-family: Arial, sans-serif;
+            font-weight: bold;
+            color: white;
+        }
+        #flashMessage {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            padding: 20px;
+            font-size: 48px;
+            font-family: Arial, sans-serif;
+            font-weight: bold;
+            color: white;
+            opacity: 0;
+            transition: opacity 1s;
+            background-color: transparent;
+        }
+        #endGamePopup {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 60%;
+            padding: 20px;
+            background-color: rgba(0, 0, 0, 0.9);
+            color: white;
+            font-family: Arial, sans-serif;
+            text-align: center;
+            font-size: 24px;
+            border: 2px solid white;
+            display: none;
+        }
+        #endGamePopup button {
+            padding: 10px 20px;
+            font-size: 20px;
+            margin-top: 20px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    <div id="assets">Your Assets: €100</div>
+    <div id="marketCap">Market Cap: €100,000</div>
+    <div id="positionsOpened">Positions Opened: 0</div>
+    <div id="averageReturn">Average Return: 0%</div>
+    <div id="avgHoldingPeriod">Avg. Holding Period: 0y</div>
+    <div id="message">Press space bar to BUY</div>
+    <div id="flashMessage"></div>
+    <div id="endGamePopup"></div>
+    <script>
+        (function() {
+            var canvas = document.getElementById('gameCanvas');
+            var ctx = canvas.getContext('2d');
+
+            // Set canvas to 3/4 of screen width and full screen height
+            function resizeCanvas() {
+                canvas.width = window.innerWidth * 0.75;
+                canvas.height = window.innerHeight;
+                width = canvas.width;
+                height = canvas.height;
+                priceZeroY = height * 0.9; // Update baseline on resize
+            }
+
+            resizeCanvas();
+
+            var width = canvas.width;
+            var height = canvas.height;
+
+            window.addEventListener('resize', function() {
+                resizeCanvas();
+            });
+
+            var initialPrice = 100;
+            var currentPrice = initialPrice;
+            var euro = 100;
+            var inPosition = false;
+            var entryPrice = 0;
+            var entryTime = 0; // Tracks when the position was opened
+            var totalHoldingDuration = 0; // Total duration of all positions
+            var numberOfShares = 1000;
+            var initialMarketCap = initialPrice * numberOfShares;
+            var marketCap = currentPrice * numberOfShares;
+            var positionsOpened = 0;
+            var totalReturnPercentage = 0;
+
+            var chapter11Duration = 3000; // Default Chapter 11 duration
+
+            var data = []; // Array to hold the price history
+
+            var minPrice = initialPrice;
+            var maxPrice = initialPrice;
+
+            var splits = 0; // Counter for splits
+
+            var priceZeroY = height * 0.9; // Baseline at 20% from the bottom
+
+            var chapter11Timer = 0;
+            var inChapter11 = false;
+            var gameOver = false;
+
+            // Parameters for Geometric Brownian Motion
+            var mu = 0.10; // Expected annual return 10%
+            var sigma = 0.20; // Annual volatility 20%
+
+            var simulatedTime = 0; // in years
+            var startTime = Date.now();
+            var yearsPerSecond = 0.5; // 1 year per 2 seconds
+            var lastUpdateTime = Date.now();
+
+            function update(dt) {
+                if (gameOver) return;
+
+                // Generate a new price using Geometric Brownian Motion
+                var randomShock = sigma * Math.sqrt(dt) * randn_bm();
+                var drift = (mu - (sigma * sigma) / 2) * dt;
+                var percentageChange = drift + randomShock;
+                currentPrice *= Math.exp(percentageChange);
+
+                // Prevent price from going negative
+                if (currentPrice < 0.01) currentPrice = 0.01;
+
+                // Handle Chapter 11 scenario
+                if (currentPrice < 100) {
+                    if (!inChapter11) {
+                        inChapter11 = true;
+                        chapter11Timer = Date.now();
+                        chapter11Duration = Math.random() * 2000 + 2000; // Random between 2-4 seconds
+                    } else if (Date.now() - chapter11Timer > chapter11Duration) {
+                        // Game over
+                        gameOver = true;
+                        showEndGamePopup(true); // Indicate bankruptcy
+                        return;
+                    }
+                } else {
+                    inChapter11 = false;
+                }
+
+                // Handle stock split
+                if (currentPrice >= 500) {
+                    splits += 1;
+                    flashMessage("SPLIT 1:2", "#006400"); // Dark green background
+                    // Scale prices
+                    var scaleFactor = 0.5;
+                    currentPrice *= scaleFactor;
+                    if (inPosition) {
+                        entryPrice *= scaleFactor;
+                    }
+                    for(var i = 0; i < data.length; i++) {
+                        data[i].price *= scaleFactor;
+                    }
+                    // Adjust shares to keep market cap constant
+                    numberOfShares *= 2;
+                }
+
+                // Update market cap
+                marketCap = currentPrice * numberOfShares;
+
+                // Update min and max prices for scaling
+                if(currentPrice > maxPrice) {
+                    maxPrice = currentPrice;
+                    adjustYAxis();
+                }
+                if(currentPrice < minPrice) {
+                    minPrice = currentPrice;
+                    adjustYAxis();
+                }
+
+                // Determine line properties
+                var lineWidth = inPosition ? 6 : 1; // Fixed line thickness
+                var color = 'white';
+                if(inPosition) {
+                    var gainLoss = currentPrice - entryPrice;
+                    color = gainLoss >= 0 ? '#00FF00' : '#FF0000'; // Bright green or red
+                }
+
+                // Add new data point with simulated time
+                data.push({
+                    price: currentPrice,
+                    color: color,
+                    lineWidth: lineWidth,
+                    time: simulatedTime,
+                    inPosition: inPosition
+                });
+
+                draw();
+            }
+
+            function draw() {
+                if (gameOver) return;
+
+                // Handle Chapter 11 background
+                if (inChapter11) {
+                    document.body.style.backgroundColor = "#800020"; // Burgundy
+                } else {
+                    document.body.style.backgroundColor = "black";
+                }
+
+                ctx.clearRect(0, 0, width, height);
+
+                // Draw grid lines
+                drawGridLines();
+
+                // Draw the line segments
+                ctx.lineJoin = 'round';
+                ctx.lineCap = 'round';
+                for(var i = 1; i < data.length; i++) {
+                    var x1 = mapTimeToX(data[i - 1].time);
+                    var y1 = mapPriceToY(data[i - 1].price);
+                    var x2 = mapTimeToX(data[i].time);
+                    var y2 = mapPriceToY(data[i].price);
+
+                    ctx.strokeStyle = data[i - 1].color;
+                    ctx.lineWidth = data[i - 1].lineWidth;
+
+                    ctx.beginPath();
+                    ctx.moveTo(x1, y1);
+                    ctx.lineTo(x2, y2);
+                    ctx.stroke();
+                }
+
+                // Draw horizontal line at entry price when in position
+                if (inPosition) {
+                    var yEntry = mapPriceToY(entryPrice);
+                    ctx.strokeStyle = 'yellow';
+                    ctx.lineWidth = 1;
+                    ctx.beginPath();
+                    ctx.moveTo(0, yEntry);
+                    ctx.lineTo(width, yEntry);
+                    ctx.stroke();
+                }
+
+                // Update assets display
+                var assetsDisplay = document.getElementById('assets');
+                if(inPosition) {
+                    var gainLoss = ((currentPrice - entryPrice) / entryPrice) * euro;
+                    var totalEuro = euro + gainLoss;
+                    assetsDisplay.innerHTML = 'Your Assets: €' + formatNumber(totalEuro.toFixed(2));
+                    assetsDisplay.style.color = gainLoss >= 0 ? '#00AA00' : '#AA0000'; // Darker green or red
+                } else {
+                    assetsDisplay.innerHTML = 'Your Assets: €' + formatNumber(euro.toFixed(2));
+                    assetsDisplay.style.color = 'white';
+                }
+
+                // Update market cap display with formatting
+                var marketCapDisplay = document.getElementById('marketCap');
+                marketCapDisplay.innerHTML = 'Market Cap: €' + formatNumber(marketCap.toFixed(2));
+
+                // Update split display
+                var splitsDisplay = document.getElementById('splitsDisplay');
+                if (!splitsDisplay) {
+                    splitsDisplay = document.createElement('div');
+                    splitsDisplay.id = 'splitsDisplay';
+                    splitsDisplay.style.position = 'absolute';
+                    splitsDisplay.style.top = '80px';
+                    splitsDisplay.style.right = '10px';
+                    splitsDisplay.style.fontSize = '20px';
+                    splitsDisplay.style.fontFamily = 'Arial, sans-serif';
+                    splitsDisplay.style.color = 'white';
+                    document.body.appendChild(splitsDisplay);
+                }
+                splitsDisplay.innerHTML = 'Splits: ' + splits;
+
+                // Update positions opened display
+                var positionsDisplay = document.getElementById('positionsOpened');
+                positionsDisplay.innerHTML = 'Positions Opened: ' + positionsOpened;
+
+                // Update average return display
+                var averageReturnDisplay = document.getElementById('averageReturn');
+                var averageReturnPercentage = positionsOpened > 0 ? (totalReturnPercentage / positionsOpened) : 0;
+                averageReturnDisplay.innerHTML = 'Average Return: ' + averageReturnPercentage.toFixed(2) + '%';
+
+                // Update average holding period display
+                var avgHoldingPeriodDisplay = document.getElementById('avgHoldingPeriod');
+                var averageHoldingPeriod = positionsOpened > 0 ? (totalHoldingDuration / positionsOpened) : 0;
+                avgHoldingPeriodDisplay.innerHTML = 'Avg. Holding Period: ' + averageHoldingPeriod.toFixed(1) + 'y';
+
+                // Update message position
+                var messageDisplay = document.getElementById('message');
+                messageDisplay.style.top = (priceZeroY + 20) + 'px';
+                if(inPosition) {
+                    messageDisplay.innerHTML = 'Press space bar to SELL';
+                } else {
+                    messageDisplay.innerHTML = 'Press space bar to BUY';
+                }
+
+                // Flash CHAPTER 11 message
+                if (inChapter11) {
+                    if (Math.floor(Date.now() / 500) % 2 === 0) {
+                        flashMessage("CHAPTER 11");
+                    } else {
+                        hideFlashMessage();
+                    }
+                } else {
+                    hideFlashMessage();
+                }
+            }
+
+            function mapPriceToY(price) {
+                var y;
+                if (price >= 0) {
+                    var normalizedPrice = price / (maxPrice || 1); // Avoid division by zero
+                    y = priceZeroY - (normalizedPrice * priceZeroY);
+                } else {
+                    y = priceZeroY; // Prices below zero map to baseline
+                }
+                return y;
+            }
+
+            function mapTimeToX(time) {
+                if (simulatedTime <= 20) {
+                    var timeRangeEnd = simulatedTime * 2;
+                    return (time / timeRangeEnd) * width;
+                } else {
+                    return (time / 40) * width;
+                }
+            }
+
+            function adjustYAxis() {
+                // Adjust minPrice and maxPrice to include some padding
+                var priceRange = maxPrice - minPrice;
+                minPrice = Math.max(0, minPrice - priceRange * 0.1);
+                maxPrice += priceRange * 0.1;
+            }
+
+            function drawGridLines() {
+                ctx.strokeStyle = '#333333'; // Dark grey color for grid lines
+                ctx.lineWidth = 1;
+
+                // Draw horizontal lines every 100 units
+                var startPrice = Math.floor(minPrice / 100) * 100;
+                var endPrice = Math.ceil(maxPrice / 100) * 100;
+
+                for(var price = startPrice; price <= endPrice; price += 100) {
+                    if (price < 0) continue; // Skip negative prices
+                    var y = mapPriceToY(price);
+                    ctx.beginPath();
+                    ctx.moveTo(0, y);
+                    ctx.lineTo(width, y);
+                    ctx.stroke();
+
+                    // Draw price label
+                    ctx.fillStyle = 'white';
+                    ctx.font = '12px Arial';
+                    ctx.fillText(price.toFixed(0), 5, y - 5);
+                }
+
+                // Draw vertical grid lines dynamically based on current time
+                var interval = 5; // Interval in years
+                var maxTime = simulatedTime <= 20 ? simulatedTime * 2 : 40;
+                for(var year = 0; year <= maxTime; year += interval) {
+                    var x = mapTimeToX(year);
+                    ctx.beginPath();
+                    ctx.moveTo(x, 0);
+                    ctx.lineTo(x, height);
+                    ctx.stroke();
+
+                    // Draw year label
+                    ctx.fillStyle = 'white';
+                    ctx.font = '12px Arial';
+                    ctx.fillText("Year " + year, x + 5, height - 10);
+                }
+            }
+
+            function togglePosition() {
+                if (gameOver) return;
+
+                if(!inPosition) {
+                    // Buy
+                    inPosition = true;
+                    entryPrice = currentPrice;
+                    entryTime = simulatedTime;
+                } else {
+                    // Sell
+                    inPosition = false;
+                    var gainLossPercentage = ((currentPrice - entryPrice) / entryPrice) * 100;
+                    var positionDuration = simulatedTime - entryTime; // in years
+                    totalHoldingDuration += positionDuration;
+                    positionsOpened += 1;
+                    // Annualize the return based on the holding period
+                    var annualizedReturnPercentage = gainLossPercentage / positionDuration; // Annualized
+                    totalReturnPercentage += annualizedReturnPercentage;
+
+                    var gainLoss = euro * gainLossPercentage / 100;
+                    euro += gainLoss;
+                }
+            }
+
+            function flashMessage(message, bgColor) {
+                var flashDisplay = document.getElementById('flashMessage');
+                flashDisplay.innerHTML = message;
+                flashDisplay.style.opacity = '1';
+                flashDisplay.style.backgroundColor = bgColor || 'transparent';
+
+                // Fade out after 1 second
+                setTimeout(function() {
+                    flashDisplay.style.transition = 'opacity 2s';
+                    flashDisplay.style.opacity = '0';
+                    setTimeout(function() {
+                        flashDisplay.style.transition = ''; // Reset transition
+                        flashDisplay.style.backgroundColor = 'transparent';
+                    }, 1000);
+                }, 1000); // Display for 1 second before fading out
+            }
+
+            function hideFlashMessage() {
+                var flashDisplay = document.getElementById('flashMessage');
+                flashDisplay.style.opacity = '0';
+                flashDisplay.style.backgroundColor = 'transparent';
+            }
+
+            // Function to format numbers with thousands separators and units
+            function formatNumber(num) {
+                return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+            }
+
+            // Function to generate normally distributed random numbers
+            function randn_bm() {
+                var u = 0, v = 0;
+                while(u === 0) u = Math.random();
+                while(v === 0) v = Math.random();
+                return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+            }
+
+            document.addEventListener('keydown', function(e) {
+                if(e.code === 'Space') {
+                    togglePosition();
+                }
+            });
+
+            function gameLoop() {
+                if (gameOver) return;
+
+                var currentTime = Date.now();
+                var elapsedTime = (currentTime - startTime) / 1000; // in seconds
+                simulatedTime = elapsedTime * yearsPerSecond; // in years
+
+                var dt = (currentTime - lastUpdateTime) / 1000 * yearsPerSecond; // dt in years
+                lastUpdateTime = currentTime;
+
+                if (simulatedTime >= 40) {
+                    gameOver = true;
+                    showEndGamePopup(false); // Indicate normal game end
+                    return;
+                }
+
+                update(dt);
+                requestAnimationFrame(gameLoop);
+            }
+
+            function showEndGamePopup(isBankruptcy) {
+                if (inPosition) {
+                    // Force sell
+                    inPosition = false;
+                    var gainLossPercentage = ((currentPrice - entryPrice) / entryPrice) * 100;
+                    var positionDuration = simulatedTime - entryTime; // in years
+                    totalHoldingDuration += positionDuration;
+                    positionsOpened += 1;
+                    totalReturnPercentage += gainLossPercentage;
+                    var gainLoss = euro * gainLossPercentage / 100;
+                    euro += gainLoss;
+                }
+
+                var endGameDisplay = document.getElementById('endGamePopup');
+                var resultMessage = '';
+
+                if (isBankruptcy) {
+                    if (!inPosition) {
+                        // Win if no open positions during bankruptcy
+                        resultMessage = 'You avoided the crash! You win!';
+                        endGameDisplay.style.backgroundColor = "#006400"; // Dark green for win
+                    } else {
+                        // Force sell at 0 value
+                        inPosition = false; 
+                        positionsOpened += 1;
+                        totalReturnPercentage += -100; // Complete loss
+                        euro = 0; // User loses all assets
+                        resultMessage = 'Game Over: The market has defaulted. You lost everything.';
+                        endGameDisplay.style.backgroundColor = "#800000"; // Dark red for loss
+                    }
+                } else {
+                    // User's asset multiple and annualized return
+                    var userFinalAssets = euro;
+                    var userMultiple = userFinalAssets / 100;
+                    var userAnnualReturn = (Math.pow(userMultiple, 1 / 40) - 1) * 100;
+
+                    // Market's asset multiple and annualized return
+                    var marketFinalCap = marketCap;
+                    var marketMultiple = marketFinalCap / initialMarketCap;
+                    var marketAnnualReturn = (Math.pow(marketMultiple, 1 / 40) - 1) * 100;
+
+                    // Calculate average holding period
+                    var averageHoldingPeriod = positionsOpened > 0 ? (totalHoldingDuration / positionsOpened) : 0;
+
+                    // Calculate user's average return
+                    var averageReturnPercentage = positionsOpened > 0 ? (totalReturnPercentage / positionsOpened) : 0;
+
+                    // Determine win or loss
+                    if (userMultiple > marketMultiple) {
+                        resultMessage = 'Congratulations! You won! You beat the market!';
+                        endGameDisplay.style.backgroundColor = "#006400"; // Dark green for win
+                    } else {
+                        resultMessage = 'You Lost! You did NOT beat the market.';
+                        endGameDisplay.style.backgroundColor = "#800000"; // Dark red for loss
+                    }
+
+                    // Prepare statistics
+                    endGameDisplay.innerHTML = '<h2>' + resultMessage + '</h2>' +
+                        '<p>Market Result: ' + marketMultiple.toFixed(0) + 'x (' + marketAnnualReturn.toFixed(2) + '% annualized)</p>' +
+                        '<p>Your Result: ' + userMultiple.toFixed(0) + 'x (' + userAnnualReturn.toFixed(2) + '% annualized)</p>' +
+                        '<p>Average Return per Position: ' + averageReturnPercentage.toFixed(2) + '%</p>' +
+                        '<p>Avg. Holding Period: ' + averageHoldingPeriod.toFixed(1) + 'y</p>' +
+                        '<p>Total Positions Opened: ' + positionsOpened + '</p>' +
+                        '<p>Final Assets: €' + formatNumber(userFinalAssets.toFixed(2)) + '</p>' +
+                        '<button id="restartButton">Play Again</button>';
+                }
+
+                endGameDisplay.style.display = 'block';
+
+                // Add event listener to the restart button
+                document.getElementById('restartButton').addEventListener('click', function() {
+                    location.reload();
+                });
+            }
+
+            adjustYAxis(); // Initial adjustment
+            gameLoop();
+        })();
+    </script>
+</body>
+</html>
