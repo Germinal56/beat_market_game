@@ -2,6 +2,7 @@
 <html>
 <head>
     <title>Market Game</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
         body, html {
             margin: 0;
@@ -9,13 +10,15 @@
             overflow: hidden;
             background-color: black;
             color: white;
+            max-height: 100vh;
+            max-width: 100vw;
         }
         #assets {
             position: absolute;
             top: 10px;
             right: 10px;
             font-size: 24px;
-            font-family: Arial, sans-serif;
+            font-family: Lato, sans-serif;
             font-weight: bold;
             color: white;
         }
@@ -24,15 +27,15 @@
             top: 50px;
             right: 10px;
             font-size: 20px;
-            font-family: Arial, sans-serif;
+            font-family: Lato, sans-serif;
             color: white;
         }
-        #splitDisplay {
+        #splitsDisplay {
             position: absolute;
             top: 80px;
             right: 10px;
             font-size: 20px;
-            font-family: Arial, sans-serif;
+            font-family: Lato, sans-serif;
             color: white;
         }
         #positionsOpened {
@@ -40,7 +43,7 @@
             top: 110px;
             right: 10px;
             font-size: 20px;
-            font-family: Arial, sans-serif;
+            font-family: Lato, sans-serif;
             color: white;
         }
         #averageReturn {
@@ -48,7 +51,7 @@
             top: 140px;
             right: 10px;
             font-size: 20px;
-            font-family: Arial, sans-serif;
+            font-family: Lato, sans-serif;
             color: white;
         }
         #avgHoldingPeriod {
@@ -56,15 +59,25 @@
             top: 170px;
             right: 10px;
             font-size: 20px;
-            font-family: Arial, sans-serif;
+            font-family: Lato, sans-serif;
             color: white;
+        }
+        #countrySelector {
+            position: absolute;
+            top: 200px;
+            right: 10px;
+            font-size: 20px;
+            font-family: Lato, sans-serif;
+            background-color: black;
+            color: white;
+            border: 1px solid white;
         }
         #message {
             position: absolute;
             left: 50%;
             transform: translateX(-50%);
             font-size: 24px;
-            font-family: Arial, sans-serif;
+            font-family: Lato, sans-serif;
             font-weight: bold;
             color: white;
         }
@@ -75,7 +88,7 @@
             transform: translate(-50%, -50%);
             padding: 20px;
             font-size: 48px;
-            font-family: Arial, sans-serif;
+            font-family: Lato, sans-serif;
             font-weight: bold;
             color: white;
             opacity: 0;
@@ -91,7 +104,7 @@
             padding: 20px;
             background-color: rgba(0, 0, 0, 0.9);
             color: white;
-            font-family: Arial, sans-serif;
+            font-family: Lato, sans-serif;
             text-align: center;
             font-size: 24px;
             border: 2px solid white;
@@ -103,16 +116,42 @@
             margin-top: 20px;
             cursor: pointer;
         }
+        @media (max-width: 639px) {
+            #flashMessage, #endGamePopup, #message {
+                width:100%;
+                text-align: center;
+            }
+            #gameCanvas {
+                position: absolute;
+                top: 20%;
+            }
+        }
+        @keyframes beeping {
+            0% { opacity: 0; }
+            50% { opacity: 1; }
+            100% { opacity: 0; }
+        }
+
+        .beeping {
+            animation: beeping 2s infinite;
+        }
     </style>
 </head>
 <body>
     <canvas id="gameCanvas"></canvas>
     <div id="assets">Your Assets: €100</div>
     <div id="marketCap">Market Cap: €100,000</div>
-    <div id="positionsOpened">Positions Opened: 0</div>
-    <div id="averageReturn">Average Return: 0%</div>
+    <div id="splitsDisplay">Splits: 0</div>
+    <div id="positionsOpened">#Trades: 0</div>
+    <div id="averageReturn">Avg. Gain/Loss: €0.00</div>
     <div id="avgHoldingPeriod">Avg. Holding Period: 0y</div>
-    <div id="message">Press space bar to BUY</div>
+    <select id="countrySelector">
+        <option value="Switzerland">🇨🇭 Switzerland</option>
+        <option value="Kosovo">🇽🇰 Kosovo</option>
+        <option value="Italy">🇮🇹 Italy</option>
+        <option value="Denmark">🇩🇰 Denmark</option>
+    </select>
+    <div id="message">Press SPACE to BUY</div>
     <div id="flashMessage"></div>
     <div id="endGamePopup"></div>
     <script>
@@ -122,8 +161,12 @@
 
             // Set canvas to 3/4 of screen width and full screen height
             function resizeCanvas() {
-                canvas.width = window.innerWidth * 0.75;
-                canvas.height = window.innerHeight;
+                canvas.width = window.innerWidth;
+                canvas.height = window.innerHeight * 0.8;
+                if (window.innerWidth >= 640) {
+                    canvas.width = window.innerWidth * 0.75;
+                    canvas.height = window.innerHeight;
+                }
                 width = canvas.width;
                 height = canvas.height;
                 priceZeroY = height * 0.9; // Update baseline on resize
@@ -140,20 +183,21 @@
 
             var initialPrice = 100;
             var currentPrice = initialPrice;
-            var euro = 100;
+            var plaayerAssets = 100;     // assets
             var inPosition = false;
             var entryPrice = 0;
             var entryTime = 0; // Tracks when the position was opened
             var totalHoldingDuration = 0; // Total duration of all positions
-            var numberOfShares = 1000;
+            var numberOfShares = 100000;
             var initialMarketCap = initialPrice * numberOfShares;
             var marketCap = currentPrice * numberOfShares;
             var positionsOpened = 0;
-            var totalReturnPercentage = 0;
+            var totalGainLoss = 0;
 
             var chapter11Duration = 3000; // Default Chapter 11 duration
 
             var data = []; // Array to hold the price history
+            var taxLabels = []; // Array to hold tax labels
 
             var minPrice = initialPrice;
             var maxPrice = initialPrice;
@@ -174,6 +218,23 @@
             var startTime = Date.now();
             var yearsPerSecond = 0.5; // 1 year per 2 seconds
             var lastUpdateTime = Date.now();
+
+            var countryTaxRates = {
+                "Switzerland": 0,
+                "Kosovo": 0.1,
+                "Italy": 0.26,
+                "Denmark": 0.42
+            };
+            var countries = ["Switzerland", "Kosovo", "Italy", "Denmark"];
+            var currentCountryIndex = 0; // Start with Switzerland
+            var taxRate = countryTaxRates["Switzerland"];
+
+            // Update tax rate when country is changed via dropdown
+            document.getElementById('countrySelector').addEventListener('change', function() {
+                var selectedCountry = this.value;
+                taxRate = countryTaxRates[selectedCountry];
+                currentCountryIndex = countries.indexOf(selectedCountry);
+            });
 
             function update(dt) {
                 if (gameOver) return;
@@ -206,15 +267,18 @@
                 // Handle stock split
                 if (currentPrice >= 500) {
                     splits += 1;
-                    flashMessage("SPLIT 1:2", "#006400"); // Dark green background
+                    flashMessage("SPLIT 1:2");
                     // Scale prices
                     var scaleFactor = 0.5;
                     currentPrice *= scaleFactor;
                     if (inPosition) {
                         entryPrice *= scaleFactor;
                     }
-                    for(var i = 0; i < data.length; i++) {
+                    for(var i = 0; i < data.length; i++) {          //Previous prices
                         data[i].price *= scaleFactor;
+                    }
+                    for(var i = 0; i < taxLabels.length; i++) {          //Tax labels
+                        taxLabels[i].price *= scaleFactor;
                     }
                     // Adjust shares to keep market cap constant
                     numberOfShares *= 2;
@@ -286,6 +350,19 @@
                     ctx.stroke();
                 }
 
+                // Draw tax labels
+                taxLabels.forEach(function(label) {
+                    var x = mapTimeToX(label.time);
+                    var y = mapPriceToY(label.price);
+                    ctx.save();
+                    ctx.translate(x, y - 20); // Slightly above the point
+                    ctx.rotate(-Math.PI / 8); // Rotate counterclockwise
+                    ctx.fillStyle = 'yellow';
+                    ctx.font = '16px Lato';
+                    ctx.fillText(label.taxAmount, 0, 0);
+                    ctx.restore();
+                });
+
                 // Draw horizontal line at entry price when in position
                 if (inPosition) {
                     var yEntry = mapPriceToY(entryPrice);
@@ -300,42 +377,30 @@
                 // Update assets display
                 var assetsDisplay = document.getElementById('assets');
                 if(inPosition) {
-                    var gainLoss = ((currentPrice - entryPrice) / entryPrice) * euro;
-                    var totalEuro = euro + gainLoss;
-                    assetsDisplay.innerHTML = 'Your Assets: €' + formatNumber(totalEuro.toFixed(2));
+                    var gainLoss = ((currentPrice - entryPrice) / entryPrice) * plaayerAssets;
+                    assetsDisplay.innerHTML = 'Your Assets: €' + formatNumber((plaayerAssets + gainLoss).toFixed(2));
                     assetsDisplay.style.color = gainLoss >= 0 ? '#00AA00' : '#AA0000'; // Darker green or red
                 } else {
-                    assetsDisplay.innerHTML = 'Your Assets: €' + formatNumber(euro.toFixed(2));
+                    assetsDisplay.innerHTML = 'Your Assets: € ' + formatNumber(plaayerAssets.toFixed(2));
                     assetsDisplay.style.color = 'white';
                 }
 
                 // Update market cap display with formatting
                 var marketCapDisplay = document.getElementById('marketCap');
-                marketCapDisplay.innerHTML = 'Market Cap: €' + formatNumber(marketCap.toFixed(2));
+                marketCapDisplay.innerHTML = 'Market Cap: € ' + formatNumber(marketCap.toFixed(0));
 
-                // Update split display
+                // Update splits display
                 var splitsDisplay = document.getElementById('splitsDisplay');
-                if (!splitsDisplay) {
-                    splitsDisplay = document.createElement('div');
-                    splitsDisplay.id = 'splitsDisplay';
-                    splitsDisplay.style.position = 'absolute';
-                    splitsDisplay.style.top = '80px';
-                    splitsDisplay.style.right = '10px';
-                    splitsDisplay.style.fontSize = '20px';
-                    splitsDisplay.style.fontFamily = 'Arial, sans-serif';
-                    splitsDisplay.style.color = 'white';
-                    document.body.appendChild(splitsDisplay);
-                }
                 splitsDisplay.innerHTML = 'Splits: ' + splits;
 
                 // Update positions opened display
                 var positionsDisplay = document.getElementById('positionsOpened');
-                positionsDisplay.innerHTML = 'Positions Opened: ' + positionsOpened;
+                positionsDisplay.innerHTML = '# Trades: ' + positionsOpened;
 
-                // Update average return display
+                // Update average gain/loss display
                 var averageReturnDisplay = document.getElementById('averageReturn');
-                var averageReturnPercentage = positionsOpened > 0 ? (totalReturnPercentage / positionsOpened) : 0;
-                averageReturnDisplay.innerHTML = 'Average Return: ' + averageReturnPercentage.toFixed(2) + '%';
+                var averageGainLoss = positionsOpened > 0 ? (totalGainLoss / positionsOpened) : 0;
+                averageReturnDisplay.innerHTML = 'Avg. Gain/Loss: € ' + averageGainLoss.toFixed(2);
 
                 // Update average holding period display
                 var avgHoldingPeriodDisplay = document.getElementById('avgHoldingPeriod');
@@ -344,11 +409,20 @@
 
                 // Update message position
                 var messageDisplay = document.getElementById('message');
-                messageDisplay.style.top = (priceZeroY + 20) + 'px';
-                if(inPosition) {
-                    messageDisplay.innerHTML = 'Press space bar to SELL';
+                if (window.innerWidth > window.innerHeight) {
+                    messageDisplay.style.top = (priceZeroY + 10) + 'px';
+                    if(inPosition) {
+                        messageDisplay.innerHTML = 'Press SPACE to EXIT';
+                    } else {
+                        messageDisplay.innerHTML = 'Press SPACE to ENTER';
+                    }
                 } else {
-                    messageDisplay.innerHTML = 'Press space bar to BUY';
+                    messageDisplay.style.top = (priceZeroY + window.innerHeight*0.2 + 10) + 'px';
+                    if(inPosition) {
+                        messageDisplay.innerHTML = 'Tap to EXIT';
+                    } else {
+                        messageDisplay.innerHTML = 'Tap to ENTER';
+                    }
                 }
 
                 // Flash CHAPTER 11 message
@@ -408,7 +482,7 @@
 
                     // Draw price label
                     ctx.fillStyle = 'white';
-                    ctx.font = '12px Arial';
+                    ctx.font = '12px Lato';
                     ctx.fillText(price.toFixed(0), 5, y - 5);
                 }
 
@@ -424,55 +498,102 @@
 
                     // Draw year label
                     ctx.fillStyle = 'white';
-                    ctx.font = '12px Arial';
+                    ctx.font = '12px Lato';
                     ctx.fillText("Year " + year, x + 5, height - 10);
                 }
+            }
+
+            function updateIndicators() {
+                // Update assets display
+                var assetsDisplay = document.getElementById('assets');
+                assetsDisplay.innerHTML = 'Your Assets: €' + formatNumber(plaayerAssets.toFixed(2));
+                assetsDisplay.style.color = 'white';
+
+                // Update positions opened display
+                var positionsDisplay = document.getElementById('positionsOpened');
+                positionsDisplay.innerHTML = '#Trades: ' + positionsOpened;
+
+                // Update average gain/loss display
+                var averageReturnDisplay = document.getElementById('averageReturn');
+                var averageGainLoss = positionsOpened > 0 ? (totalGainLoss / positionsOpened) : 0;
+                averageReturnDisplay.innerHTML = 'Avg. Gain/Loss per Trade: €' + averageGainLoss.toFixed(2);
+
+                // Update average holding period display
+                var avgHoldingPeriodDisplay = document.getElementById('avgHoldingPeriod');
+                var averageHoldingPeriod = positionsOpened > 0 ? (totalHoldingDuration / positionsOpened) : 0;
+                avgHoldingPeriodDisplay.innerHTML = 'Avg. Holding Period: ' + averageHoldingPeriod.toFixed(1) + 'y';
+
+                // Update splits display
+                var splitsDisplay = document.getElementById('splitsDisplay');
+                splitsDisplay.innerHTML = 'Splits: ' + splits;
+
+                // Update market cap display
+                var marketCapDisplay = document.getElementById('marketCap');
+                marketCapDisplay.innerHTML = 'Market Cap: €' + formatNumber(marketCap.toFixed(0));
+            }
+
+            function closePosition(isForcedSale = false, salePrice = currentPrice) {
+                if (!inPosition) return;
+
+                inPosition = false; // Close the position
+                var totalReturn = (salePrice - entryPrice) / entryPrice; // Total return in decimal
+                var positionDuration = simulatedTime - entryTime; // Holding period in years
+                totalHoldingDuration += positionDuration;
+                positionsOpened += 1;
+
+                // Update the user's assets
+                var gainLoss = plaayerAssets * totalReturn;
+                var taxAmount = 0;
+                if (gainLoss > 0) {
+                    taxAmount = gainLoss * taxRate;
+                    gainLoss -= taxAmount;
+                    taxLabels.push({
+                        time: simulatedTime,
+                        price: salePrice,
+                        taxAmount: '-' + taxAmount.toFixed(0)
+                    });
+                }
+                plaayerAssets += gainLoss;
+                totalGainLoss += gainLoss;
+
+                // Update indicators
+                updateIndicators();
             }
 
             function togglePosition() {
                 if (gameOver) return;
 
-                if(!inPosition) {
+                if (!inPosition) {
                     // Buy
                     inPosition = true;
                     entryPrice = currentPrice;
                     entryTime = simulatedTime;
                 } else {
                     // Sell
-                    inPosition = false;
-                    var gainLossPercentage = ((currentPrice - entryPrice) / entryPrice) * 100;
-                    var positionDuration = simulatedTime - entryTime; // in years
-                    totalHoldingDuration += positionDuration;
-                    positionsOpened += 1;
-                    // Annualize the return based on the holding period
-                    var annualizedReturnPercentage = gainLossPercentage / positionDuration; // Annualized
-                    totalReturnPercentage += annualizedReturnPercentage;
-
-                    var gainLoss = euro * gainLossPercentage / 100;
-                    euro += gainLoss;
+                    closePosition();
                 }
             }
 
-            function flashMessage(message, bgColor) {
+            function flashMessage(message, animation = '') {
                 var flashDisplay = document.getElementById('flashMessage');
                 flashDisplay.innerHTML = message;
                 flashDisplay.style.opacity = '1';
-                flashDisplay.style.backgroundColor = bgColor || 'transparent';
+                flashDisplay.style.transition = 'opacity';
 
-                // Fade out after 1 second
-                setTimeout(function() {
-                    flashDisplay.style.transition = 'opacity 2s';
-                    flashDisplay.style.opacity = '0';
+                if (animation) {
+                    flashDisplay.classList.add(animation);
+                } else {
+                    // Fade out after 1 second
                     setTimeout(function() {
-                        flashDisplay.style.transition = ''; // Reset transition
-                        flashDisplay.style.backgroundColor = 'transparent';
-                    }, 1000);
-                }, 1000); // Display for 1 second before fading out
+                        flashDisplay.style.opacity = '0';
+                    }, 1000); // Display for 1 second before fading out
+                }
             }
 
             function hideFlashMessage() {
                 var flashDisplay = document.getElementById('flashMessage');
                 flashDisplay.style.opacity = '0';
+                flashDisplay.classList.remove('beeping');
                 flashDisplay.style.backgroundColor = 'transparent';
             }
 
@@ -489,11 +610,29 @@
                 return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
             }
 
+            document.addEventListener('touchstart', function() {
+                togglePosition();
+                }, { passive: true }
+            );
+
             document.addEventListener('keydown', function(e) {
                 if(e.code === 'Space') {
                     togglePosition();
+                } else if (e.code === 'ArrowUp') {
+                    currentCountryIndex = (currentCountryIndex + countries.length - 1) % countries.length;
+                    updateCountry();
+                } else if (e.code === 'ArrowDown') {
+                    currentCountryIndex = (currentCountryIndex + 1) % countries.length;
+                    updateCountry();
                 }
             });
+
+            function updateCountry() {
+                var selectedCountry = countries[currentCountryIndex];
+                taxRate = countryTaxRates[selectedCountry];
+                var countrySelector = document.getElementById('countrySelector');
+                countrySelector.value = selectedCountry;
+            }
 
             function gameLoop() {
                 if (gameOver) return;
@@ -516,69 +655,70 @@
             }
 
             function showEndGamePopup(isBankruptcy) {
-                if (inPosition) {
-                    // Force sell
-                    inPosition = false;
-                    var gainLossPercentage = ((currentPrice - entryPrice) / entryPrice) * 100;
-                    var positionDuration = simulatedTime - entryTime; // in years
-                    totalHoldingDuration += positionDuration;
-                    positionsOpened += 1;
-                    totalReturnPercentage += gainLossPercentage;
-                    var gainLoss = euro * gainLossPercentage / 100;
-                    euro += gainLoss;
-                }
-
                 var endGameDisplay = document.getElementById('endGamePopup');
                 var resultMessage = '';
 
                 if (isBankruptcy) {
-                    if (!inPosition) {
-                        // Win if no open positions during bankruptcy
-                        resultMessage = 'You avoided the crash! You win!';
-                        endGameDisplay.style.backgroundColor = "#006400"; // Dark green for win
-                    } else {
+                    marketCap = 0; // Set market cap to 0
+                    updateIndicators(); // Reflect market cap in the UI
+
+                    if (inPosition) {
                         // Force sell at 0 value
-                        inPosition = false; 
-                        positionsOpened += 1;
-                        totalReturnPercentage += -100; // Complete loss
-                        euro = 0; // User loses all assets
-                        resultMessage = 'Game Over: The market has defaulted. You lost everything.';
-                        endGameDisplay.style.backgroundColor = "#800000"; // Dark red for loss
+                        closePosition(true, 0); // Forced sale at price zero
+                        plaayerAssets = 0; // User loses all assets
+                        resultMessage = 'Game Over<br/>The market has defaulted.<br/>You lost everything.';
+                        endGameDisplay.style.backgroundColor = "#b00000"; // Dark red for loss
+                        endGameDisplay.innerHTML = '<h2>' + resultMessage + '</h2>' +
+                            '<p>You were holding a position when the market defaulted.</p>' +
+                            '<button id="restartButton">Play Again</button>';
+                    } else {
+                        // Win if no open positions during bankruptcy
+                        resultMessage = 'Well Done!<br/>The market defaulted but you got out in time.';
+                        endGameDisplay.style.backgroundColor = "#006400"; // Dark green for win
+                        endGameDisplay.innerHTML = '<h2>' + resultMessage + '</h2>' +
+                            '<p>You avoided holding positions during a catastrophic market default.</p>' +
+                            '<button id="restartButton">Play Again</button>';
                     }
                 } else {
+                    if (inPosition) {
+                        // Force sell at current price
+                        closePosition();
+                    }
+
                     // User's asset multiple and annualized return
-                    var userFinalAssets = euro;
+                    var userFinalAssets = plaayerAssets;
                     var userMultiple = userFinalAssets / 100;
                     var userAnnualReturn = (Math.pow(userMultiple, 1 / 40) - 1) * 100;
 
-                    // Market's asset multiple and annualized return
+                    // Market's asset multiple and annualized return with tax
                     var marketFinalCap = marketCap;
-                    var marketMultiple = marketFinalCap / initialMarketCap;
+                    var adjustedFinalMarketCap = ((marketFinalCap - initialMarketCap) * (1 - taxRate)) + initialMarketCap;
+                    var marketMultiple = adjustedFinalMarketCap / initialMarketCap;
                     var marketAnnualReturn = (Math.pow(marketMultiple, 1 / 40) - 1) * 100;
 
                     // Calculate average holding period
                     var averageHoldingPeriod = positionsOpened > 0 ? (totalHoldingDuration / positionsOpened) : 0;
 
-                    // Calculate user's average return
-                    var averageReturnPercentage = positionsOpened > 0 ? (totalReturnPercentage / positionsOpened) : 0;
+                    // Calculate user's average gain/loss per trade
+                    var averageGainLoss = positionsOpened > 0 ? (totalGainLoss / positionsOpened) : 0;
 
                     // Determine win or loss
                     if (userMultiple > marketMultiple) {
-                        resultMessage = 'Congratulations! You won! You beat the market!';
+                        resultMessage = 'Congratulations! You won!<br/> You beat the market!';
                         endGameDisplay.style.backgroundColor = "#006400"; // Dark green for win
                     } else {
-                        resultMessage = 'You Lost! You did NOT beat the market.';
+                        resultMessage = 'You Lost!<br/> You did NOT beat the market.';
                         endGameDisplay.style.backgroundColor = "#800000"; // Dark red for loss
                     }
 
                     // Prepare statistics
                     endGameDisplay.innerHTML = '<h2>' + resultMessage + '</h2>' +
-                        '<p>Market Result: ' + marketMultiple.toFixed(0) + 'x (' + marketAnnualReturn.toFixed(2) + '% annualized)</p>' +
-                        '<p>Your Result: ' + userMultiple.toFixed(0) + 'x (' + userAnnualReturn.toFixed(2) + '% annualized)</p>' +
-                        '<p>Average Return per Position: ' + averageReturnPercentage.toFixed(2) + '%</p>' +
-                        '<p>Avg. Holding Period: ' + averageHoldingPeriod.toFixed(1) + 'y</p>' +
-                        '<p>Total Positions Opened: ' + positionsOpened + '</p>' +
-                        '<p>Final Assets: €' + formatNumber(userFinalAssets.toFixed(2)) + '</p>' +
+                        '<p>Market Result: ' + marketMultiple.toFixed(0) + 'x (' + marketAnnualReturn.toFixed(2) + '% rate)' +
+                        '<br/>Your Result: ' + userMultiple.toFixed(0) + 'x (' + userAnnualReturn.toFixed(2) + '% rate)' +
+                        '<br/>Avg. Gain/Loss per Trade: € ' + averageGainLoss.toFixed(2) + '' +
+                        '<br/>Avg. Holding Period: ' + averageHoldingPeriod.toFixed(1) + 'y' +
+                        '<br/># Trades: ' + positionsOpened +
+                        '<br/>Final Assets: € ' + formatNumber(userFinalAssets.toFixed(2)) + '</p>' +
                         '<button id="restartButton">Play Again</button>';
                 }
 
