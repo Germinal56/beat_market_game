@@ -45,6 +45,7 @@
         #message {
             position: absolute;
             left: 50%;
+            bottom: 64px;
             transform: translateX(-50%);
             font-size: 24px;
             font-family: Lato, sans-serif;
@@ -202,7 +203,7 @@
             var chapter11Threshold = 95;
             var splitThreshold = 500;
 
-            var chapter11Duration = 3000; // Default Chapter 11 duration
+            var chapter11Duration = 3000/yearsPerSecond; // Default Chapter 11 duration
 
             var data = []; // Array to hold the price history
             var taxLabels = []; // Array to hold tax labels
@@ -255,7 +256,7 @@
                     if (!inChapter11) {
                         inChapter11 = true;
                         chapter11Timer = Date.now();
-                        chapter11Duration = Math.random() * 2000 + 2000; // Random between 2-4 seconds
+                        chapter11Duration = Math.random() * 2000/yearsPerSecond + 1000/yearsPerSecond; // Random between 1-3 seconds
                     } else if (Date.now() - chapter11Timer > chapter11Duration) {
                         // Game over
                         gameOver = true;
@@ -398,19 +399,22 @@
 
                 // Update Market Cap
                 var mktCapDisplay = document.getElementById('mktCap');
+                var mktCapLabel = document.getElementById('mktCapLabel');
                 mktCapDisplay.innerHTML = '€ ' + formatNumber((currentPrice * numberOfShares).toFixed(0));
 
                 // Update message position
                 var messageDisplay = document.getElementById('message');
                 if (window.innerWidth > window.innerHeight) {
-                    messageDisplay.style.top = (priceZeroY) + 'px';
+                    //messageDisplay.style.top = (priceZeroY) + 'px';
                     if(inPosition) {
                         messageDisplay.innerHTML = 'Press SPACE to SELL';
                     } else {
                         messageDisplay.innerHTML = 'Press SPACE to BUY';
                     }
                 } else {
-                    messageDisplay.style.top = (priceZeroY +2) + 'px';
+                    messageDisplay.style.bottom = '45px';
+                    mktCapDisplay.style.right = '15px';
+                    mktCapLabel.style.right = '15px';
                     if(inPosition) {
                         messageDisplay.innerHTML = 'Tap to SELL';
                     } else {
